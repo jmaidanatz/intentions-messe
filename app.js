@@ -249,6 +249,7 @@ async function init() {
     await scheduleNotification();
   }
   await loadIntentions();
+  initCal();
 }
 
 async function loadIntentions() {
@@ -260,6 +261,9 @@ async function loadIntentions() {
     const result = await fetchIntentionsDuJour();
     saveCache(result);
     renderCards(result);
+    // Vider le cache calendrier et recharger le mois affiché
+    calCache = {};
+    loadCal(calYear, calMonth);
   } catch (e) {
     if (cached) renderCards(cached);
     else renderCards({ _error: e.message || "Erreur de connexion" });
@@ -269,3 +273,152 @@ async function loadIntentions() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+// ═══════════════════════════════════════════════════════
+// ── Calendrier mensuel ──
+// ═══════════════════════════════════════════════════════
+
+const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const DAYS_FR   = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+
+// État du calendrier
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-based
+let calCache = {}; // "YYYY-MM" → data
+
+function calMonthKey(y, m) {
+  return `${y}-${String(m + 1).padStart(2, "0")}`;
+}
+
+function calMonthLabel(y, m) {
+  return `${MONTHS_FR[m]} ${y}`;
+}
+
+// Fenêtre autorisée : mois courant jusqu'à +5
+function calMinMonth() {
+  const now = new Date();
+  return { y: now.getFullYear(), m: now.getMonth() };
+}
+function calMaxMonth() {
+  const now = new Date();
+  let m = now.getMonth() + 5;
+  let y = now.getFullYear() + Math.floor(m / 12);
+  m = m % 12;
+  return { y, m };
+}
+function calCanGoPrev(y, m) {
+  const min = calMinMonth();
+  return y > min.y || (y === min.y && m > min.m);
+}
+function calCanGoNext(y, m) {
+  const max = calMaxMonth();
+  return y < max.y || (y === max.y && m < max.m);
+}
+
+async function fetchMonth(y, m) {
+  const key = calMonthKey(y, m);
+  if (calCache[key]) return calCache[key];
+  const res = await fetch(`${PROXY_URL}?month=${key}`, { method: "GET" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  calCache[key] = data;
+  return data;
+}
+
+function renderCal(y, m, data) {
+  const key = calMonthKey(y, m);
+  const today = todayISO();
+  const list = document.getElementById("cal-list");
+
+  // Mise à jour label et boutons
+  document.getElementById("cal-month-label").textContent = calMonthLabel(y, m);
+  document.getElementById("cal-prev").disabled = !calCanGoPrev(y, m);
+  document.getElementById("cal-next").disabled = !calCanGoNext(y, m);
+
+  if (!data) {
+    list.innerHTML = `<div class="cal-loading"><div class="spinner"></div><p class="loading-text">Chargement...</p></div>`;
+    return;
+  }
+
+  const byDay = data.byDay || {};
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  let html = "";
+  let lastWeek = -1;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${key}-${String(d).padStart(2, "0")}`;
+    const dateObj = new Date(dateStr + "T00:00:00");
+    const dow = dateObj.getDay(); // 0=dim
+    const week = Math.floor((d + new Date(key + "-01T00:00:00").getDay() - 1) / 7);
+
+    // Séparateur de semaine (sauf avant le 1er)
+    if (d > 1 && week !== lastWeek) {
+      html += `<div class="cal-week-sep"></div>`;
+    }
+    lastWeek = week;
+
+    const isToday = dateStr === today;
+    const intentions = byDay[dateStr] || [];
+    const dayLabel = `${DAYS_FR[dow]} ${d}`;
+
+    html += `<div class="cal-day${isToday ? " today" : ""}">`;
+    html += `<span class="cal-day-num">${d}</span>`;
+    html += `<div class="cal-day-content">`;
+
+    if (intentions.length === 0) {
+      html += `<span class="cal-empty-day">—</span>`;
+    } else {
+      intentions.forEach(i => {
+        const nom = i.nom.replace(/\s*♦\s*$/, "");
+        const fixeMark = i.fixe ? `<span class="fixe-mark">♦</span>` : "";
+        html += `<div class="cal-intention">${nom}${fixeMark}</div>`;
+        if (i.demandeur) {
+          html += `<div class="cal-demandeur">${i.demandeur}</div>`;
+        }
+      });
+    }
+
+    html += `</div></div>`;
+  }
+
+  list.innerHTML = html;
+
+  // Scroll vers aujourd'hui si on est sur le mois courant
+  const now = new Date();
+  if (y === now.getFullYear() && m === now.getMonth()) {
+    const todayEl = list.querySelector(".cal-day.today");
+    if (todayEl) setTimeout(() => todayEl.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
+  }
+}
+
+async function loadCal(y, m) {
+  renderCal(y, m, null); // spinner
+  try {
+    const data = await fetchMonth(y, m);
+    renderCal(y, m, data);
+  } catch (e) {
+    document.getElementById("cal-list").innerHTML = `<p class="notif-info">Erreur : ${e.message}</p>`;
+  }
+}
+
+function initCal() {
+  const now = new Date();
+  calYear  = now.getFullYear();
+  calMonth = now.getMonth();
+
+  document.getElementById("cal-prev").addEventListener("click", () => {
+    if (!calCanGoPrev(calYear, calMonth)) return;
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    loadCal(calYear, calMonth);
+  });
+
+  document.getElementById("cal-next").addEventListener("click", () => {
+    if (!calCanGoNext(calYear, calMonth)) return;
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    loadCal(calYear, calMonth);
+  });
+
+  loadCal(calYear, calMonth);
+}

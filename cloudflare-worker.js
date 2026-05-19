@@ -5,6 +5,10 @@
  *   NOTION_TOKEN    → secret_...   (Secret)
  *   ALLOWED_ORIGIN  → https://jmaidanatz.github.io  (Text)
  *   NOTION_DB_ID    → 2d183ba074148018ae4dfee6db4c950d  (Text)
+ *
+ * Routes :
+ *   GET /          → intention du jour
+ *   GET /?month=YYYY-MM → toutes les intentions du mois
  */
 
 addEventListener("fetch", event => {
@@ -24,24 +28,24 @@ async function handleRequest(request) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
-
   if (request.method !== "GET") {
     return new Response("Method not allowed", { status: 405 });
   }
-
   if (allowed && allowed !== "*" && !origin.startsWith(allowed)) {
     return new Response("Forbidden", { status: 403 });
   }
-
   if (!NOTION_TOKEN) {
     return new Response("Notion token not configured", { status: 500 });
   }
 
+  const url = new URL(request.url);
+  const monthParam = url.searchParams.get("month"); // "YYYY-MM" ou null
+
   const today = getParisTodayISO();
 
+  // Récupérer toutes les entrées sans filtre
   let allResults = [];
   let cursor = undefined;
-
   do {
     const body = {
       sorts: [{ property: "Date", direction: "ascending" }],
@@ -73,47 +77,98 @@ async function handleRequest(request) {
     const data = await notionRes.json();
     allResults = allResults.concat(data.results);
     cursor = data.has_more ? data.next_cursor : undefined;
-
   } while (cursor);
 
-  const intentions = extractIntentions(allResults, today);
+  let responseBody;
 
-  return new Response(JSON.stringify({ found: intentions.length > 0, intentions }), {
+  if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+    // Mode mois : retourner toutes les intentions du mois groupées par jour
+    responseBody = extractMonth(allResults, monthParam);
+  } else {
+    // Mode jour : intention du jour
+    const intentions = extractIntentions(allResults, today);
+    responseBody = { found: intentions.length > 0, intentions };
+  }
+
+  return new Response(JSON.stringify(responseBody), {
     status: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders }
   });
 }
 
+// ── Extraction du jour ────────────────────────────────────────────────────────
+
 function extractIntentions(results, today) {
   const found = [];
+  for (const page of results) {
+    const props = page.properties;
+    const dateObj = props.Date?.date;
+    if (!dateObj) continue;
+    const dateStart = dateObj.start ? dateObj.start.substring(0, 10) : null;
+    const dateEnd   = dateObj.end   ? dateObj.end.substring(0, 10)   : null;
+    if (!dateStart) continue;
+    const covers =
+      (!dateEnd && dateStart === today) ||
+      (dateEnd && dateStart <= today && dateEnd >= today);
+    if (!covers) continue;
+    found.push(buildEntry(props, dateStart, dateEnd));
+  }
+  return found;
+}
+
+// ── Extraction du mois ────────────────────────────────────────────────────────
+
+function extractMonth(results, monthParam) {
+  const [y, m] = monthParam.split("-").map(Number);
+  const firstDay = `${monthParam}-01`;
+  const lastDay = `${monthParam}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+
+  // Regrouper par jour
+  const byDay = {};
 
   for (const page of results) {
     const props = page.properties;
     const dateObj = props.Date?.date;
     if (!dateObj) continue;
-
     const dateStart = dateObj.start ? dateObj.start.substring(0, 10) : null;
     const dateEnd   = dateObj.end   ? dateObj.end.substring(0, 10)   : null;
-
     if (!dateStart) continue;
 
-    const covers =
-      (!dateEnd && dateStart === today) ||
-      (dateEnd && dateStart <= today && dateEnd >= today);
+    // Calculer l'intersection avec le mois
+    const overlapStart = dateStart > firstDay ? dateStart : firstDay;
+    const overlapEnd   = (!dateEnd || dateEnd > lastDay) ? lastDay : dateEnd;
 
-    if (!covers) continue;
+    if (overlapStart > lastDay || dateStart > lastDay) continue;
+    if (dateEnd && dateEnd < firstDay) continue;
+    if (!dateEnd && (dateStart < firstDay || dateStart > lastDay)) continue;
 
-    found.push({
-      nom: extractTitle(props.Nom) || "(sans nom)",
-      demandeur: extractRichText(props.Demandeur) || null,
-      description: extractRichText(props.Description) || null,
-      dateDebut: dateStart,
-      dateFin: dateEnd || null,
-      multiJours: !!dateEnd && dateEnd !== dateStart,
-    });
+    // Itérer sur chaque jour couvert dans le mois
+    let d = new Date(overlapStart + "T00:00:00");
+    const endD = new Date(overlapEnd + "T00:00:00");
+
+    while (d <= endD) {
+      const key = d.toISOString().split("T")[0];
+      if (!byDay[key]) byDay[key] = [];
+      byDay[key].push(buildEntry(props, dateStart, dateEnd));
+      d.setDate(d.getDate() + 1);
+    }
   }
 
-  return found;
+  return { month: monthParam, byDay };
+}
+
+// ── Construction d'une entrée ─────────────────────────────────────────────────
+
+function buildEntry(props, dateStart, dateEnd) {
+  return {
+    nom: extractTitle(props.Nom) || "(sans nom)",
+    demandeur: extractRichText(props.Demandeur) || null,
+    description: extractRichText(props.Description) || null,
+    dateDebut: dateStart,
+    dateFin: dateEnd || null,
+    fixe: (extractTitle(props.Nom) || "").trimEnd().endsWith("♦"),
+    multiJours: !!dateEnd && dateEnd !== dateStart,
+  };
 }
 
 function extractTitle(prop) {
