@@ -1,11 +1,15 @@
 // ─── Service Worker — Intentions de Messe ─────────────────────────────────────
-const CACHE_NAME = "intentions-v2";
-const ASSETS = ["/intentions-messe/", "/intentions-messe/index.html", "/intentions-messe/app.js", "/intentions-messe/manifest.json"];
+const CACHE_NAME = "intentions-v3";
+const ASSETS = [
+  "/intentions-messe/",
+  "/intentions-messe/index.html",
+  "/intentions-messe/app.js",
+  "/intentions-messe/manifest.json"
+];
 
-let scheduleConfig = null; // { hour, minute, proxyUrl }
+let scheduleConfig = null;
 let alarmTimer = null;
 
-// ─── Installation & cache ─────────────────────────────────────────────────────
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
   self.skipWaiting();
@@ -20,17 +24,14 @@ self.addEventListener("activate", (e) => {
   self.clients.claim();
 });
 
-// ─── Fetch (offline) ──────────────────────────────────────────────────────────
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   if (e.request.url.includes("workers.dev")) return;
   e.respondWith(caches.match(e.request).then(c => c || fetch(e.request)));
 });
 
-// ─── Messages depuis app.js ───────────────────────────────────────────────────
 self.addEventListener("message", (e) => {
-  const { type } = e.data;
-  if (type === "SCHEDULE") {
+  if (e.data.type === "SCHEDULE") {
     scheduleConfig = {
       hour: e.data.hour,
       minute: e.data.minute,
@@ -38,12 +39,11 @@ self.addEventListener("message", (e) => {
     };
     armNextAlarm();
   }
-  if (type === "SHOW_NOTIFICATION") {
-    showNotification(e.data.intention);
+  if (e.data.type === "SHOW_NOTIFICATION") {
+    showNotification(e.data.result);
   }
 });
 
-// ─── Alarme ───────────────────────────────────────────────────────────────────
 function msUntilNext(hour, minute) {
   const now = new Date();
   const next = new Date(now);
@@ -64,62 +64,62 @@ function armNextAlarm() {
 
 async function fireAlarm() {
   try {
-    const intention = await queryProxy(scheduleConfig.proxyUrl);
-    showNotification(intention);
+    const res = await fetch(scheduleConfig.proxyUrl, { method: "GET" });
+    const result = await res.json();
+    showNotification(result);
     const clients = await self.clients.matchAll();
-    clients.forEach(c => c.postMessage({ type: "INTENTION_UPDATE", intention }));
+    clients.forEach(c => c.postMessage({ type: "INTENTION_UPDATE", result }));
   } catch (e) {
     showNotification({ found: false, error: e.message });
   }
 }
 
-// ─── Requête GET vers le Worker Cloudflare ────────────────────────────────────
-async function queryProxy(proxyUrl) {
-  const res = await fetch(proxyUrl, { method: "GET" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+function buildNotifBody(result) {
+  if (!result?.found || !result.intentions?.length) {
+    return "Aucune intention enregistrée pour aujourd'hui.";
+  }
+  return result.intentions
+    .map((i, idx) => result.intentions.length > 1
+      ? `${idx + 1}. ${i.nom}${i.demandeur ? " (" + i.demandeur + ")" : ""}`
+      : `${i.nom}${i.demandeur ? "\nDemandé par " + i.demandeur : ""}`)
+    .join("\n");
 }
 
-// ─── Affichage notification ───────────────────────────────────────────────────
-function showNotification(intention) {
-  const title = "✠ Intention de Messe du jour";
-  const body = intention.found
-    ? intention.nom + (intention.demandeur ? "\nDemandé par " + intention.demandeur : "")
-    : "Aucune intention enregistrée pour aujourd'hui.";
+function showNotification(result) {
+  const count = result?.intentions?.length || 0;
+  const title = count > 1
+    ? `✠ ${count} intentions de Messe aujourd'hui`
+    : "✠ Intention de Messe du jour";
 
   self.registration.showNotification(title, {
-    body,
-    icon: "/icon-192.png",
-    badge: "/icon-96.png",
+    body: buildNotifBody(result),
+    icon: "/intentions-messe/icon-192.png",
+    badge: "/intentions-messe/icon-96.png",
     tag: "intention-messe",
     renotify: true,
-    data: { url: "/" },
+    data: { url: "/intentions-messe/" },
   });
 }
 
-// ─── Clic sur la notification ────────────────────────────────────────────────
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
   e.waitUntil(
     self.clients.matchAll({ type: "window" }).then(clients => {
-      const existing = clients.find(c => c.url.includes(self.location.origin));
+      const existing = clients.find(c => c.url.includes("/intentions-messe/"));
       if (existing) return existing.focus();
-      return self.clients.openWindow("/");
+      return self.clients.openWindow("/intentions-messe/");
     })
   );
 });
 
-// ─── Periodic Background Sync (filet de sécurité) ────────────────────────────
 self.addEventListener("periodicsync", (e) => {
   if (e.tag === "intention-messe-daily") {
-    e.waitUntil(checkAndNotifyIfMorning());
+    e.waitUntil((async () => {
+      if (!scheduleConfig) return;
+      const now = new Date();
+      const targetMin = scheduleConfig.hour * 60 + scheduleConfig.minute;
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      if (Math.abs(nowMin - targetMin) <= 15) await fireAlarm();
+    })());
   }
 });
-
-async function checkAndNotifyIfMorning() {
-  if (!scheduleConfig) return;
-  const now = new Date();
-  const targetMin = scheduleConfig.hour * 60 + scheduleConfig.minute;
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  if (Math.abs(nowMin - targetMin) <= 15) await fireAlarm();
-}
