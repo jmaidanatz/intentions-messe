@@ -358,7 +358,7 @@ function renderCal(y, m, data) {
     const dayLabel = `${DAYS_FR[dow]} ${d}`;
 
     html += `<div class="cal-day${isToday ? " today" : ""}">`;
-    html += `<span class="cal-day-num"><span class="cal-day-name">${DAYS_FR[dow]}</span>${d}</span>`;
+    html += `<span class="cal-day-num"><span class="cal-day-name">${DAYS_FR[dow]}</span> ${d}</span>`;
     html += `<div class="cal-day-content">`;
 
     if (intentions.length === 0) {
