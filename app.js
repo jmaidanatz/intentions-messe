@@ -1,8 +1,5 @@
 // ─── Configuration ────────────────────────────────────────────────────────────
-const NOTION_DB_ID = "2d183ba074148018ae4dfee6db4c950d";
-
-// ← Remplacer par l'URL de votre Cloudflare Worker après déploiement
-// Exemple : "https://intentions-proxy.votre-compte.workers.dev"
+// ← Remplacer par l'URL de votre Cloudflare Worker
 const PROXY_URL = "https://intentions-proxy.j-maidanatz.workers.dev";
 
 const NOTIFY_HOUR = 6;
@@ -57,43 +54,11 @@ function loadCache() {
   } catch { return null; }
 }
 
-// ─── Appel API via proxy Cloudflare ──────────────────────────────────────────
+// ─── Appel Worker (GET simple) ────────────────────────────────────────────────
 async function fetchIntentionDuJour() {
-  const today = todayISO();
-
-  const response = await fetch(PROXY_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      mcp_servers: [{ type: "url", url: "https://mcp.notion.com/mcp", name: "notion-mcp" }],
-      messages: [{
-        role: "user",
-        content: `Interroge la base de données Notion "Intentions de Messes" (ID: ${NOTION_DB_ID}).
-
-La date d'aujourd'hui est : ${today}
-
-Trouve l'intention valable aujourd'hui. Une intention couvre un jour ou une période : elle est valable si (date:Date:start) <= ${today} ET (date:Date:end) >= ${today}, OU si date:Date:end est nulle et date:Date:start = ${today}.
-
-Retourne UNIQUEMENT un objet JSON valide sans markdown ni backticks :
-Si trouvée : {"found":true,"nom":"...","demandeur":"... ou null","description":"... ou null","dateDebut":"YYYY-MM-DD","dateFin":"YYYY-MM-DD ou null","multiJours":true/false}
-Si non trouvée : {"found":false}
-Si erreur : {"found":false,"error":"description"}`
-      }]
-    })
-  });
-
+  const response = await fetch(PROXY_URL, { method: "GET" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json();
-
-  const text = data.content
-    .filter(b => b.type === "text")
-    .map(b => b.text)
-    .join("");
-
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  return await response.json();
 }
 
 // ─── Rendu de la carte intention ──────────────────────────────────────────────
@@ -219,7 +184,6 @@ async function scheduleNotification() {
       type: "SCHEDULE",
       hour: NOTIFY_HOUR,
       minute: NOTIFY_MINUTE,
-      notionDbId: NOTION_DB_ID,
       proxyUrl: PROXY_URL,
     });
   }
