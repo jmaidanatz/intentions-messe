@@ -136,7 +136,7 @@ function extractMonth(results, monthParam) {
 
     // Calculer l'intersection avec le mois
     const overlapStart = dateStart > firstDay ? dateStart : firstDay;
-    const overlapEnd   = (!dateEnd || dateEnd > lastDay) ? lastDay : dateEnd;
+    const overlapEnd   = !dateEnd ? dateStart : (dateEnd > lastDay ? lastDay : dateEnd);
 
     if (overlapStart > lastDay || dateStart > lastDay) continue;
     if (dateEnd && dateEnd < firstDay) continue;
