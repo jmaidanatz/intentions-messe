@@ -384,8 +384,17 @@ function renderCal(y, m, data) {
       intentions.forEach(i => {
         const nom = i.nom.replace(/\s*♦\s*$/, "");
         const fixeMark = i.fixe ? `<span class="fixe-mark">♦</span>` : "";
+        // Détecter neuvaine (9 jours) ou trentain (30 jours)
+        let periodTag = "";
+        if (i.dateDebut && i.dateFin) {
+          const start = new Date(i.dateDebut + "T00:00:00");
+          const end   = new Date(i.dateFin   + "T00:00:00");
+          const days  = Math.round((end - start) / 86400000) + 1;
+          if (days === 9)  periodTag = " 9️⃣";
+          if (days === 30) periodTag = " 🪦";
+        }
         html += `<div class="cal-entry">`;
-        html += `<div class="cal-intention">${nom}${fixeMark}</div>`;
+        html += `<div class="cal-intention">${nom}${periodTag}${fixeMark}</div>`;
         if (i.demandeur) {
           html += `<div class="cal-demandeur">${i.demandeur}</div>`;
         }
