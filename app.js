@@ -342,19 +342,15 @@ function renderCal(y, m, data) {
   const byDay = data.byDay || {};
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   let html = "";
-  let lastWeek = -1;
-
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${key}-${String(d).padStart(2, "0")}`;
     const dateObj = new Date(dateStr + "T00:00:00");
     const dow = dateObj.getDay(); // 0=dim
-    const week = Math.floor((d + new Date(key + "-01T00:00:00").getDay() - 1) / 7);
 
-    // Séparateur de semaine (sauf avant le 1er)
-    if (d > 1 && week !== lastWeek) {
-      html += `<div class="cal-week-sep"></div>`;
+    // Séparateur entre chaque jour (sauf avant le 1er)
+    if (d > 1) {
+      html += `<div class="cal-day-sep"></div>`;
     }
-    lastWeek = week;
 
     const isToday = dateStr === today;
     const intentions = byDay[dateStr] || [];
