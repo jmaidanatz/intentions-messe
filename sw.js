@@ -1,8 +1,8 @@
 // ─── Service Worker — Intentions de Messe ─────────────────────────────────────
-const CACHE_NAME = "intentions-v1";
+const CACHE_NAME = "intentions-v2";
 const ASSETS = ["/", "/index.html", "/app.js", "/manifest.json"];
 
-let scheduleConfig = null; // { hour, minute, notionDbId, proxyUrl }
+let scheduleConfig = null; // { hour, minute, proxyUrl }
 let alarmTimer = null;
 
 // ─── Installation & cache ─────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ self.addEventListener("activate", (e) => {
 // ─── Fetch (offline) ──────────────────────────────────────────────────────────
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
-  if (e.request.url.includes("workers.dev") || e.request.url.includes("anthropic.com")) return;
+  if (e.request.url.includes("workers.dev")) return;
   e.respondWith(caches.match(e.request).then(c => c || fetch(e.request)));
 });
 
@@ -34,7 +34,6 @@ self.addEventListener("message", (e) => {
     scheduleConfig = {
       hour: e.data.hour,
       minute: e.data.minute,
-      notionDbId: e.data.notionDbId,
       proxyUrl: e.data.proxyUrl,
     };
     armNextAlarm();
@@ -65,7 +64,7 @@ function armNextAlarm() {
 
 async function fireAlarm() {
   try {
-    const intention = await queryNotion(scheduleConfig.notionDbId, scheduleConfig.proxyUrl);
+    const intention = await queryProxy(scheduleConfig.proxyUrl);
     showNotification(intention);
     const clients = await self.clients.matchAll();
     clients.forEach(c => c.postMessage({ type: "INTENTION_UPDATE", intention }));
@@ -74,38 +73,17 @@ async function fireAlarm() {
   }
 }
 
-// ─── Query Notion via proxy Cloudflare ───────────────────────────────────────
-async function queryNotion(dbId, proxyUrl) {
-  const today = new Date().toISOString().split("T")[0];
-
-  const res = await fetch(proxyUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 500,
-      mcp_servers: [{ type: "url", url: "https://mcp.notion.com/mcp", name: "notion-mcp" }],
-      messages: [{
-        role: "user",
-        content: `Interroge la base de données Notion "Intentions de Messes" (ID: ${dbId}).
-Aujourd'hui : ${today}
-Retourne UNIQUEMENT un JSON sans markdown :
-Si trouvée : {"found":true,"nom":"...","demandeur":"...","description":"...","multiJours":false}
-Sinon : {"found":false}`
-      }]
-    })
-  });
-
+// ─── Requête GET vers le Worker Cloudflare ────────────────────────────────────
+async function queryProxy(proxyUrl) {
+  const res = await fetch(proxyUrl, { method: "GET" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  const text = data.content.filter(b => b.type === "text").map(b => b.text).join("");
-  return JSON.parse(text.replace(/```json|```/g, "").trim());
+  return await res.json();
 }
 
 // ─── Affichage notification ───────────────────────────────────────────────────
 function showNotification(intention) {
   const title = "✠ Intention de Messe du jour";
-  let body = intention.found
+  const body = intention.found
     ? intention.nom + (intention.demandeur ? "\nDemandé par " + intention.demandeur : "")
     : "Aucune intention enregistrée pour aujourd'hui.";
 
