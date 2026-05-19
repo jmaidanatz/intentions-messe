@@ -326,11 +326,10 @@ async function fetchMonth(y, m) {
 }
 
 function renderCal(y, m, data) {
-  const key = calMonthKey(y, m);
   const today = todayISO();
   const list = document.getElementById("cal-list");
 
-  // Mise à jour label et boutons
+  // Toujours afficher le nom du mois et mettre à jour les boutons
   document.getElementById("cal-month-label").textContent = calMonthLabel(y, m);
   document.getElementById("cal-prev").disabled = !calCanGoPrev(y, m);
   document.getElementById("cal-next").disabled = !calCanGoNext(y, m);
