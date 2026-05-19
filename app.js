@@ -367,10 +367,12 @@ function renderCal(y, m, data) {
       intentions.forEach(i => {
         const nom = i.nom.replace(/\s*♦\s*$/, "");
         const fixeMark = i.fixe ? `<span class="fixe-mark">♦</span>` : "";
+        html += `<div class="cal-entry">`;
         html += `<div class="cal-intention">${nom}${fixeMark}</div>`;
         if (i.demandeur) {
           html += `<div class="cal-demandeur">${i.demandeur}</div>`;
         }
+        html += `</div>`;
       });
     }
 
