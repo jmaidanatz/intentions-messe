@@ -261,9 +261,7 @@ async function loadIntentions() {
     const result = await fetchIntentionsDuJour();
     saveCache(result);
     renderCards(result);
-    // Vider le cache calendrier et recharger le mois affiché
-    calCache = {};
-    loadCal(calYear, calMonth);
+
   } catch (e) {
     if (cached) renderCards(cached);
     else renderCards({ _error: e.message || "Erreur de connexion" });
@@ -284,7 +282,23 @@ const DAYS_FR   = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 // État du calendrier
 let calYear  = new Date().getFullYear();
 let calMonth = new Date().getMonth(); // 0-based
-let calCache = {}; // "YYYY-MM" → data
+// Cache calendrier persistant en localStorage
+const CAL_CACHE_PREFIX = "cal_cache_";
+
+function calSaveCache(key, data) {
+  try { localStorage.setItem(CAL_CACHE_PREFIX + key, JSON.stringify(data)); } catch(e) {}
+}
+
+function calLoadCache(key) {
+  try {
+    const raw = localStorage.getItem(CAL_CACHE_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+function calClearCache(key) {
+  try { localStorage.removeItem(CAL_CACHE_PREFIX + key); } catch(e) {}
+}
 
 function calMonthKey(y, m) {
   return `${y}-${String(m + 1).padStart(2, "0")}`;
@@ -315,13 +329,16 @@ function calCanGoNext(y, m) {
   return y < max.y || (y === max.y && m < max.m);
 }
 
-async function fetchMonth(y, m) {
+async function fetchMonth(y, m, forceReload = false) {
   const key = calMonthKey(y, m);
-  if (calCache[key]) return calCache[key];
+  if (!forceReload) {
+    const cached = calLoadCache(key);
+    if (cached) return cached;
+  }
   const res = await fetch(`${PROXY_URL}?month=${key}`, { method: "GET" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  calCache[key] = data;
+  calSaveCache(key, data);
   return data;
 }
 
@@ -389,10 +406,20 @@ function renderCal(y, m, data) {
   }
 }
 
-async function loadCal(y, m) {
-  renderCal(y, m, null); // spinner
+async function loadCal(y, m, forceReload = false) {
+  // Si pas de forceReload, afficher le cache immédiatement pendant le chargement
+  if (!forceReload) {
+    const cached = calLoadCache(calMonthKey(y, m));
+    if (cached) {
+      renderCal(y, m, cached);
+    } else {
+      renderCal(y, m, null); // spinner seulement si pas de cache
+    }
+  } else {
+    renderCal(y, m, null); // spinner sur forceReload
+  }
   try {
-    const data = await fetchMonth(y, m);
+    const data = await fetchMonth(y, m, forceReload);
     renderCal(y, m, data);
   } catch (e) {
     document.getElementById("cal-list").innerHTML = `<p class="notif-info">Erreur : ${e.message}</p>`;
@@ -403,6 +430,15 @@ function initCal() {
   const now = new Date();
   calYear  = now.getFullYear();
   calMonth = now.getMonth();
+
+  document.getElementById("cal-refresh").addEventListener("click", async () => {
+    const btn = document.getElementById("cal-refresh");
+    btn.classList.add("spinning");
+    btn.disabled = true;
+    await loadCal(calYear, calMonth, true);
+    btn.classList.remove("spinning");
+    btn.disabled = false;
+  });
 
   document.getElementById("cal-prev").addEventListener("click", () => {
     if (!calCanGoPrev(calYear, calMonth)) return;
