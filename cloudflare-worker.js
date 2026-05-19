@@ -39,13 +39,12 @@ async function handleRequest(request) {
 
   const today = getParisTodayISO();
 
-  // Récupérer toutes les entrées sans filtre, on filtre côté Worker
   let allResults = [];
   let cursor = undefined;
 
   do {
     const body = {
-      sorts: [{ property: "Date", direction: "descending" }],
+      sorts: [{ property: "Date", direction: "ascending" }],
       page_size: 100,
     };
     if (cursor) body.start_cursor = cursor;
@@ -77,55 +76,44 @@ async function handleRequest(request) {
 
   } while (cursor);
 
-  const intention = extractIntention(allResults, today);
+  const intentions = extractIntentions(allResults, today);
 
-  return new Response(JSON.stringify(intention), {
+  return new Response(JSON.stringify({ found: intentions.length > 0, intentions }), {
     status: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders }
   });
 }
 
-function extractIntention(results, today) {
-  if (!results || results.length === 0) return { found: false };
+function extractIntentions(results, today) {
+  const found = [];
 
   for (const page of results) {
     const props = page.properties;
     const dateObj = props.Date?.date;
     if (!dateObj) continue;
 
-    // Extraire seulement les 10 premiers caractères (YYYY-MM-DD)
     const dateStart = dateObj.start ? dateObj.start.substring(0, 10) : null;
     const dateEnd   = dateObj.end   ? dateObj.end.substring(0, 10)   : null;
 
     if (!dateStart) continue;
 
-    // Intention sur un seul jour
-    if (!dateEnd) {
-      if (dateStart === today) {
-        return buildResult(props, dateStart, null);
-      }
-      continue;
-    }
+    const covers =
+      (!dateEnd && dateStart === today) ||
+      (dateEnd && dateStart <= today && dateEnd >= today);
 
-    // Intention sur plusieurs jours : today doit être dans [dateStart, dateEnd]
-    if (dateStart <= today && dateEnd >= today) {
-      return buildResult(props, dateStart, dateEnd);
-    }
+    if (!covers) continue;
+
+    found.push({
+      nom: extractTitle(props.Nom) || "(sans nom)",
+      demandeur: extractRichText(props.Demandeur) || null,
+      description: extractRichText(props.Description) || null,
+      dateDebut: dateStart,
+      dateFin: dateEnd || null,
+      multiJours: !!dateEnd && dateEnd !== dateStart,
+    });
   }
 
-  return { found: false };
-}
-
-function buildResult(props, dateStart, dateEnd) {
-  return {
-    found: true,
-    nom: extractTitle(props.Nom) || "(sans nom)",
-    demandeur: extractRichText(props.Demandeur) || null,
-    description: extractRichText(props.Description) || null,
-    dateDebut: dateStart,
-    dateFin: dateEnd || null,
-    multiJours: !!dateEnd && dateEnd !== dateStart,
-  };
+  return found;
 }
 
 function extractTitle(prop) {
