@@ -169,7 +169,7 @@ function triggerNotification(result) {
   if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
     if (Notification.permission === "granted") {
       const body = buildNotifBody(result);
-      new Notification("Intention(s) de Messe du jour", { body, tag: "intention" });
+      new Notification("✠ Intention(s) de Messe du jour", { body, tag: "intention" });
     }
     return;
   }
@@ -339,6 +339,7 @@ function renderCal(y, m, data) {
     return;
   }
 
+  const key = calMonthKey(y, m);
   const byDay = data.byDay || {};
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   let html = "";
