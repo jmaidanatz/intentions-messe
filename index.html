@@ -167,7 +167,8 @@
       margin-left: 4px;
     }
     .cal-refresh-btn:hover { opacity: 1; }
-    .cal-refresh-btn.spinning { animation: spin 0.8s linear infinite; opacity: 0.7; }
+    .cal-refresh-btn.spinning { opacity: 0.7; }
+    .cal-refresh-btn.spinning span { display: inline-block; animation: spin 0.8s linear infinite; }
 
     .cal-month-label {
       font-family: 'Cormorant Garamond', serif;
@@ -331,7 +332,7 @@
         <button class="cal-nav-btn" id="cal-prev">&#8592;</button>
         <span class="cal-month-label" id="cal-month-label">—</span>
         <button class="cal-nav-btn" id="cal-next">&#8594;</button>
-        <button class="cal-nav-btn cal-refresh-btn" id="cal-refresh" title="Actualiser">&#8635;</button>
+        <button class="cal-nav-btn cal-refresh-btn" id="cal-refresh" title="Actualiser"><span>&#8635;</span></button>
       </div>
       <div id="cal-list" class="cal-list"></div>
     </section>
