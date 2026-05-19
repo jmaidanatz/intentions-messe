@@ -455,4 +455,27 @@ function initCal() {
   });
 
   loadCal(calYear, calMonth);
+
+  // Préchargement silencieux des mois suivants en arrière-plan
+  preloadNextMonths();
+}
+
+async function preloadNextMonths() {
+  const max = calMaxMonth();
+  let y = calYear;
+  let m = calMonth;
+  for (let i = 0; i < 5; i++) {
+    m++;
+    if (m > 11) { m = 0; y++; }
+    if (y > max.y || (y === max.y && m > max.m)) break;
+    const key = calMonthKey(y, m);
+    if (!calLoadCache(key)) {
+      try {
+        const data = await fetchMonth(y, m);
+        calSaveCache(key, data);
+      } catch (e) {
+        // Échec silencieux — le mois sera rechargé à la demande
+      }
+    }
+  }
 }
