@@ -3,7 +3,7 @@ const NOTION_DB_ID = "2d183ba074148018ae4dfee6db4c950d";
 
 // ← Remplacer par l'URL de votre Cloudflare Worker après déploiement
 // Exemple : "https://intentions-proxy.votre-compte.workers.dev"
-const PROXY_URL = "intentions-proxy.j-maidanatz.workers.dev";
+const PROXY_URL = "https://intentions-proxy.j-maidanatz.workers.dev";
 
 const NOTIFY_HOUR = 6;
 const NOTIFY_MINUTE = 45;
