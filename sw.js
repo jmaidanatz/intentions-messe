@@ -1,6 +1,6 @@
 // ─── Service Worker — Intentions de Messe ─────────────────────────────────────
 const CACHE_NAME = "intentions-v2";
-const ASSETS = ["/", "/index.html", "/app.js", "/manifest.json"];
+const ASSETS = ["/intentions-messe/", "/intentions-messe/index.html", "/intentions-messe/app.js", "/intentions-messe/manifest.json"];
 
 let scheduleConfig = null; // { hour, minute, proxyUrl }
 let alarmTimer = null;
