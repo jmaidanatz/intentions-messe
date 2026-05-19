@@ -39,40 +39,45 @@ async function handleRequest(request) {
 
   const today = getParisTodayISO();
 
-  // Récupérer toutes les entrées dont la date de début est <= aujourd'hui
-  // Le filtrage fin >= aujourd'hui se fait dans extractIntention côté Worker
-  const notionBody = {
-    filter: {
-      property: "Date",
-      date: { on_or_before: today }
-    },
-    sorts: [{ property: "Date", direction: "descending" }],
-    page_size: 50
-  };
+  // Récupérer toutes les entrées sans filtre, on filtre côté Worker
+  let allResults = [];
+  let cursor = undefined;
 
-  const notionRes = await fetch(
-    `https://api.notion.com/v1/databases/${NOTION_DB_ID}/query`,
-    {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${NOTION_TOKEN}`,
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(notionBody),
-    }
-  );
+  do {
+    const body = {
+      sorts: [{ property: "Date", direction: "descending" }],
+      page_size: 100,
+    };
+    if (cursor) body.start_cursor = cursor;
 
-  if (!notionRes.ok) {
-    const err = await notionRes.text();
-    return new Response(
-      JSON.stringify({ found: false, error: `Notion ${notionRes.status}: ${err}` }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+    const notionRes = await fetch(
+      `https://api.notion.com/v1/databases/${NOTION_DB_ID}/query`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${NOTION_TOKEN}`,
+          "Notion-Version": "2022-06-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }
     );
-  }
 
-  const data = await notionRes.json();
-  const intention = extractIntention(data.results, today);
+    if (!notionRes.ok) {
+      const err = await notionRes.text();
+      return new Response(
+        JSON.stringify({ found: false, error: `Notion ${notionRes.status}: ${err}` }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const data = await notionRes.json();
+    allResults = allResults.concat(data.results);
+    cursor = data.has_more ? data.next_cursor : undefined;
+
+  } while (cursor);
+
+  const intention = extractIntention(allResults, today);
 
   return new Response(JSON.stringify(intention), {
     status: 200,
@@ -85,38 +90,42 @@ function extractIntention(results, today) {
 
   for (const page of results) {
     const props = page.properties;
-    const dateStart = props.Date?.date?.start
-      ? props.Date.date.start.substring(0, 10)
-      : null;
-    const dateEnd = props.Date?.date?.end
-      ? props.Date.date.end.substring(0, 10)
-      : null;
+    const dateObj = props.Date?.date;
+    if (!dateObj) continue;
+
+    // Extraire seulement les 10 premiers caractères (YYYY-MM-DD)
+    const dateStart = dateObj.start ? dateObj.start.substring(0, 10) : null;
+    const dateEnd   = dateObj.end   ? dateObj.end.substring(0, 10)   : null;
 
     if (!dateStart) continue;
-    if (dateStart > today) continue;
 
-    // Intention sur un seul jour : dateEnd est null, dateStart doit = today
-    if (!dateEnd && dateStart !== today) continue;
+    // Intention sur un seul jour
+    if (!dateEnd) {
+      if (dateStart === today) {
+        return buildResult(props, dateStart, null);
+      }
+      continue;
+    }
 
-    // Intention sur plusieurs jours : dateEnd doit être >= today
-    if (dateEnd && dateEnd < today) continue;
-
-    const nom = extractTitle(props.Nom);
-    const demandeur = extractRichText(props.Demandeur);
-    const description = extractRichText(props.Description);
-
-    return {
-      found: true,
-      nom: nom || "(sans nom)",
-      demandeur: demandeur || null,
-      description: description || null,
-      dateDebut: dateStart,
-      dateFin: dateEnd || null,
-      multiJours: !!dateEnd && dateEnd !== dateStart,
-    };
+    // Intention sur plusieurs jours : today doit être dans [dateStart, dateEnd]
+    if (dateStart <= today && dateEnd >= today) {
+      return buildResult(props, dateStart, dateEnd);
+    }
   }
 
   return { found: false };
+}
+
+function buildResult(props, dateStart, dateEnd) {
+  return {
+    found: true,
+    nom: extractTitle(props.Nom) || "(sans nom)",
+    demandeur: extractRichText(props.Demandeur) || null,
+    description: extractRichText(props.Description) || null,
+    dateDebut: dateStart,
+    dateFin: dateEnd || null,
+    multiJours: !!dateEnd && dateEnd !== dateStart,
+  };
 }
 
 function extractTitle(prop) {
@@ -131,10 +140,6 @@ function extractRichText(prop) {
 
 function getParisTodayISO() {
   const now = new Date();
-  const parisStr = now.toLocaleString("en-US", { timeZone: "Europe/Paris" });
-  const paris = new Date(parisStr);
-  const y = paris.getFullYear();
-  const m = String(paris.getMonth() + 1).padStart(2, "0");
-  const d = String(paris.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const parisStr = now.toLocaleString("sv-SE", { timeZone: "Europe/Paris" });
+  return parisStr.substring(0, 10);
 }
