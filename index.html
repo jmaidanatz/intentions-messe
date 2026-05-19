@@ -15,7 +15,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Inconsolata:wght@300;400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inconsolata:wght@300;400&display=swap" rel="stylesheet" />
 
   <title>Intentions de Messe</title>
   <style>
@@ -36,7 +36,7 @@
     html, body {
       background: #1C1410;
       color: var(--cream);
-      font-family: 'IM Fell English', Georgia, serif;
+      font-family: 'Cormorant Garamond', Georgia, serif;
       -webkit-font-smoothing: antialiased;
     }
 
@@ -106,7 +106,7 @@
     .btn { display: block; width: 100%; padding: 12px 0; background: transparent; border: 1px solid var(--gold-dim); color: var(--text-dim); border-radius: 3px; cursor: pointer; font-family: 'Inconsolata', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; transition: border-color 0.2s, color 0.2s; }
     .btn:hover { border-color: var(--gold); color: var(--gold-light); }
     .btn:disabled { opacity: 0.4; cursor: default; }
-    .btn-primary { background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%); border: none; color: var(--dark); font-family: 'IM Fell English', serif; font-size: 15px; letter-spacing: 0.5px; font-weight: normal; text-transform: none; padding: 13px 0; }
+    .btn-primary { background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%); border: none; color: var(--dark); font-family: 'Cormorant Garamond', serif; font-size: 15px; letter-spacing: 0.5px; font-weight: normal; text-transform: none; padding: 13px 0; }
     .btn-primary:hover { filter: brightness(1.1); color: var(--dark); }
 
     /* ── Section title ── */
@@ -162,7 +162,7 @@
     .cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
 
     .cal-month-label {
-      font-family: 'IM Fell English', serif;
+      font-family: 'Cormorant Garamond', serif;
       font-size: 17px;
       font-weight: normal;
       color: var(--cream);
@@ -238,6 +238,10 @@
     }
 
     .cal-intention + .cal-intention {
+      margin-top: 7px;
+    }
+
+    .cal-entry + .cal-entry {
       margin-top: 7px;
     }
 
