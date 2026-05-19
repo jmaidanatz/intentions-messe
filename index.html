@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inconsolata:wght@300;400&display=swap" rel="stylesheet" />
 
-  <title>Intention de Messe</title>
+  <title>Intentions de Messe</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -160,6 +160,14 @@
     }
     .cal-nav-btn:hover { border-color: var(--gold); color: var(--gold-light); }
     .cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+    .cal-refresh-btn {
+      font-size: 14px;
+      opacity: 0.5;
+      margin-left: 4px;
+    }
+    .cal-refresh-btn:hover { opacity: 1; }
+    .cal-refresh-btn.spinning { animation: spin 0.8s linear infinite; opacity: 0.7; }
 
     .cal-month-label {
       font-family: 'Cormorant Garamond', serif;
@@ -304,7 +312,7 @@
     <header>
       <span class="cross">✠</span>
       <p class="date-label" id="date-label">—</p>
-      <h1>Intention de Messe</h1>
+      <h1>Intentions de Messe</h1>
     </header>
 
     <div id="install-banner">
@@ -323,6 +331,7 @@
         <button class="cal-nav-btn" id="cal-prev">&#8592;</button>
         <span class="cal-month-label" id="cal-month-label">—</span>
         <button class="cal-nav-btn" id="cal-next">&#8594;</button>
+        <button class="cal-nav-btn cal-refresh-btn" id="cal-refresh" title="Actualiser">&#8635;</button>
       </div>
       <div id="cal-list" class="cal-list"></div>
     </section>
