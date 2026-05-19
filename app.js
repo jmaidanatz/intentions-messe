@@ -169,7 +169,7 @@ function triggerNotification(result) {
   if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
     if (Notification.permission === "granted") {
       const body = buildNotifBody(result);
-      new Notification("✠ Intention(s) de Messe du jour", { body, tag: "intention" });
+      new Notification("Intention(s) de Messe du jour", { body, tag: "intention" });
     }
     return;
   }
