@@ -315,7 +315,7 @@ function calMinMonth() {
 }
 function calMaxMonth() {
   const now = new Date();
-  let m = now.getMonth() + 5;
+  let m = now.getMonth() + 11;
   let y = now.getFullYear() + Math.floor(m / 12);
   m = m % 12;
   return { y, m };
@@ -464,7 +464,7 @@ async function preloadNextMonths() {
   const max = calMaxMonth();
   let y = calYear;
   let m = calMonth;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 11; i++) {
     m++;
     if (m > 11) { m = 0; y++; }
     if (y > max.y || (y === max.y && m > max.m)) break;
