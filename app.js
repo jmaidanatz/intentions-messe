@@ -1,5 +1,4 @@
 // ─── Configuration ────────────────────────────────────────────────────────────
-// ← Remplacer par l'URL de votre Cloudflare Worker
 const PROXY_URL = "https://intentions-proxy.j-maidanatz.workers.dev";
 
 const NOTIFY_HOUR = 6;
@@ -54,18 +53,18 @@ function loadCache() {
   } catch { return null; }
 }
 
-// ─── Appel Worker (GET simple) ────────────────────────────────────────────────
-async function fetchIntentionDuJour() {
+// ─── Appel Worker ─────────────────────────────────────────────────────────────
+async function fetchIntentionsDuJour() {
   const response = await fetch(PROXY_URL, { method: "GET" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   return await response.json();
 }
 
-// ─── Rendu de la carte intention ──────────────────────────────────────────────
-function renderCard(intention) {
+// ─── Rendu des cartes ─────────────────────────────────────────────────────────
+function renderCards(result) {
   const container = document.getElementById("card-container");
 
-  if (!intention) {
+  if (!result) {
     container.innerHTML = `
       <div class="card loading fade-in">
         <div class="spinner"></div>
@@ -74,41 +73,44 @@ function renderCard(intention) {
     return;
   }
 
-  if (intention._error) {
+  if (result._error) {
     container.innerHTML = `
       <div class="card error-card fade-in">
         <span class="error-icon">&#9888;</span>
-        <p class="error-text">${intention._error}</p>
+        <p class="error-text">${result._error}</p>
       </div>`;
     return;
   }
 
-  if (!intention.found) {
+  if (!result.found || !result.intentions?.length) {
     container.innerHTML = `
       <div class="card fade-in">
         <span class="empty-icon">&#128357;</span>
         <p class="empty-text">Aucune intention enregistrée pour aujourd'hui.</p>
-        ${intention.error ? `<p class="warning-text">${intention.error}</p>` : ""}
+        ${result.error ? `<p class="warning-text">${result.error}</p>` : ""}
       </div>`;
     return;
   }
 
-  const dateLine = intention.multiJours && intention.dateFin
-    ? `${formatDate(intention.dateDebut)} — ${formatDate(intention.dateFin)}`
-    : formatDate(intention.dateDebut);
+  container.innerHTML = result.intentions.map((intention, i) => {
+    const dateLine = intention.multiJours && intention.dateFin
+      ? `${formatDate(intention.dateDebut)} — ${formatDate(intention.dateFin)}`
+      : formatDate(intention.dateDebut);
 
-  container.innerHTML = `
-    <div class="card fade-in">
-      <h2 class="intention-nom">${intention.nom}</h2>
-      ${intention.demandeur ? `
-        <span class="demandeur-label">Demandé par</span>
-        <span class="demandeur-nom">${intention.demandeur}</span>` : ""}
-      ${intention.description ? `<p class="description">${intention.description}</p>` : ""}
-      <div class="date-badge">
-        <span>&#128197;</span><span>${dateLine}</span>
-      </div>
-      ${intention.multiJours ? `<div class="multi-tag">Intention sur plusieurs jours</div>` : ""}
-    </div>`;
+    return `
+      <div class="card fade-in" style="animation-delay: ${i * 0.08}s">
+        ${result.intentions.length > 1 ? `<div class="intention-index">${i + 1} / ${result.intentions.length}</div>` : ""}
+        <h2 class="intention-nom">${intention.nom}</h2>
+        ${intention.demandeur ? `
+          <span class="demandeur-label">Demandé par</span>
+          <span class="demandeur-nom">${intention.demandeur}</span>` : ""}
+        ${intention.description ? `<p class="description">${intention.description}</p>` : ""}
+        <div class="date-badge">
+          <span>&#128197;</span><span>${dateLine}</span>
+        </div>
+        ${intention.multiJours ? `<div class="multi-tag">Intention sur plusieurs jours</div>` : ""}
+      </div>`;
+  }).join("");
 }
 
 // ─── Rendu des notifications ──────────────────────────────────────────────────
@@ -163,17 +165,26 @@ async function requestNotif() {
   renderNotif();
 }
 
-function triggerNotification(intention) {
+function triggerNotification(result) {
   if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
     if (Notification.permission === "granted") {
-      const body = intention.found
-        ? `${intention.nom}${intention.demandeur ? "\nDemandé par " + intention.demandeur : ""}`
-        : "Aucune intention enregistrée pour aujourd'hui.";
-      new Notification("✠ Intention de Messe du jour", { body, tag: "intention" });
+      const body = buildNotifBody(result);
+      new Notification("✠ Intention(s) de Messe du jour", { body, tag: "intention" });
     }
     return;
   }
-  navigator.serviceWorker.controller.postMessage({ type: "SHOW_NOTIFICATION", intention });
+  navigator.serviceWorker.controller.postMessage({ type: "SHOW_NOTIFICATION", result });
+}
+
+function buildNotifBody(result) {
+  if (!result?.found || !result.intentions?.length) {
+    return "Aucune intention enregistrée pour aujourd'hui.";
+  }
+  return result.intentions
+    .map((i, idx) => result.intentions.length > 1
+      ? `${idx + 1}. ${i.nom}${i.demandeur ? " (" + i.demandeur + ")" : ""}`
+      : `${i.nom}${i.demandeur ? "\nDemandé par " + i.demandeur : ""}`)
+    .join("\n");
 }
 
 async function scheduleNotification() {
@@ -193,7 +204,7 @@ async function scheduleNotification() {
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   try {
-    const reg = await navigator.serviceWorker.register("sw.js", { scope: "/" });
+    const reg = await navigator.serviceWorker.register("sw.js", { scope: "/intentions-messe/" });
     console.log("SW enregistré :", reg.scope);
   } catch (e) {
     console.warn("Erreur SW :", e);
@@ -203,8 +214,8 @@ async function registerServiceWorker() {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("message", (e) => {
     if (e.data?.type === "INTENTION_UPDATE") {
-      saveCache(e.data.intention);
-      renderCard(e.data.intention);
+      saveCache(e.data.result);
+      renderCards(e.data.result);
     }
   });
 }
@@ -231,27 +242,27 @@ document.addEventListener("click", async (e) => {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   document.getElementById("date-label").textContent = formatDateFull();
-  document.getElementById("btn-refresh").addEventListener("click", loadIntention);
+  document.getElementById("btn-refresh").addEventListener("click", loadIntentions);
   renderNotif();
   if ("serviceWorker" in navigator && Notification.permission === "granted") {
     await registerServiceWorker();
     await scheduleNotification();
   }
-  await loadIntention();
+  await loadIntentions();
 }
 
-async function loadIntention() {
+async function loadIntentions() {
   const btn = document.getElementById("btn-refresh");
   if (btn) btn.disabled = true;
   const cached = loadCache();
-  if (cached) renderCard(cached); else renderCard(null);
+  if (cached) renderCards(cached); else renderCards(null);
   try {
-    const intention = await fetchIntentionDuJour();
-    saveCache(intention);
-    renderCard(intention);
+    const result = await fetchIntentionsDuJour();
+    saveCache(result);
+    renderCards(result);
   } catch (e) {
-    if (cached) renderCard(cached);
-    else renderCard({ _error: e.message || "Erreur de connexion" });
+    if (cached) renderCards(cached);
+    else renderCards({ _error: e.message || "Erreur de connexion" });
   } finally {
     if (btn) btn.disabled = false;
   }
