@@ -1,8 +1,9 @@
 {
   "name": "Intentions de Messe",
   "short_name": "Intentions",
-  "description": "Intention de Messe du jour — Institut du Christ Roi",
-  "start_url": "/",
+  "description": "Intention de Messe du jour",
+  "start_url": "/intentions-messe/",
+  "scope": "/intentions-messe/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1C1410",
