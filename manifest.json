@@ -1,0 +1,32 @@
+{
+  "name": "Intentions de Messe",
+  "short_name": "Intentions",
+  "description": "Intention de Messe du jour — Institut du Christ Roi",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1C1410",
+  "theme_color": "#1C1410",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"]
+}
