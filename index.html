@@ -1,496 +1,348 @@
-// ─── Configuration ────────────────────────────────────────────────────────────
-const PROXY_URL = "https://intentions-proxy.j-maidanatz.workers.dev";
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1C1410" />
+  <meta name="description" content="Intention(s) de Messe du jour" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Intentions" />
 
-const NOTIFY_HOUR = 6;
-const NOTIFY_MINUTE = 45;
-const CACHE_KEY = "intention_cache";
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
 
-// ─── Helpers date ─────────────────────────────────────────────────────────────
-function todayISO() {
-  return new Date().toISOString().split("T")[0];
-}
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inconsolata:wght@300;400&display=swap" rel="stylesheet" />
 
-function formatDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
-}
+  <title>Intentions de Messe</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-function formatDateFull() {
-  return new Date().toLocaleDateString("fr-FR", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric"
-  });
-}
-
-function msUntilNext645() {
-  const now = new Date();
-  const next = new Date(now);
-  next.setHours(NOTIFY_HOUR, NOTIFY_MINUTE, 0, 0);
-  if (next <= now) next.setDate(next.getDate() + 1);
-  return next - now;
-}
-
-function formatCountdown(ms) {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sc = s % 60;
-  return `${String(h).padStart(2,"0")}h${String(m).padStart(2,"0")}m${String(sc).padStart(2,"0")}s`;
-}
-
-// ─── Cache local ──────────────────────────────────────────────────────────────
-function saveCache(data) {
-  localStorage.setItem(CACHE_KEY, JSON.stringify({ date: todayISO(), data }));
-}
-
-function loadCache() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const { date, data } = JSON.parse(raw);
-    if (date === todayISO()) return data;
-    return null;
-  } catch { return null; }
-}
-
-// ─── Appel Worker ─────────────────────────────────────────────────────────────
-async function fetchIntentionsDuJour() {
-  const response = await fetch(PROXY_URL, { method: "GET" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return await response.json();
-}
-
-// ─── Rendu des cartes ─────────────────────────────────────────────────────────
-function renderCards(result) {
-  const container = document.getElementById("card-container");
-
-  if (!result) {
-    container.innerHTML = `
-      <div class="card loading fade-in">
-        <div class="spinner"></div>
-        <p class="loading-text">Consultation de Notion...</p>
-      </div>`;
-    return;
-  }
-
-  if (result._error) {
-    container.innerHTML = `
-      <div class="card error-card fade-in">
-        <span class="error-icon">&#9888;</span>
-        <p class="error-text">${result._error}</p>
-      </div>`;
-    return;
-  }
-
-  if (!result.found || !result.intentions?.length) {
-    container.innerHTML = `
-      <div class="card fade-in">
-        <span class="empty-icon">&#128357;</span>
-        <p class="empty-text">Aucune intention enregistrée pour aujourd'hui.</p>
-        ${result.error ? `<p class="warning-text">${result.error}</p>` : ""}
-      </div>`;
-    return;
-  }
-
-  container.innerHTML = result.intentions.map((intention, i) => {
-    const dateLine = intention.multiJours && intention.dateFin
-      ? `${formatDate(intention.dateDebut)} — ${formatDate(intention.dateFin)}`
-      : formatDate(intention.dateDebut);
-
-    return `
-      <div class="card fade-in" style="animation-delay: ${i * 0.08}s">
-        ${result.intentions.length > 1 ? `<div class="intention-index">${i + 1} / ${result.intentions.length}</div>` : ""}
-        <h2 class="intention-nom">${intention.nom}</h2>
-        ${intention.demandeur ? `
-          <span class="demandeur-label">Demandé par</span>
-          <span class="demandeur-nom">${intention.demandeur}</span>` : ""}
-        ${intention.description ? `<p class="description">${intention.description}</p>` : ""}
-        <div class="date-badge">
-          <span>&#128197;</span><span>${dateLine}</span>
-        </div>
-        ${intention.multiJours ? `<div class="multi-tag">${(() => {
-        if (!intention.dateDebut || !intention.dateFin) return "Intention sur plusieurs jours";
-        const days = Math.round((new Date(intention.dateFin + "T00:00:00") - new Date(intention.dateDebut + "T00:00:00")) / 86400000) + 1;
-        if (days === 9) return "Neuvaine";
-        if (days === 30) return "Trentain";
-        return "Intention sur plusieurs jours";
-      })()}</div>` : ""}
-      </div>`;
-  }).join("");
-}
-
-// ─── Rendu des notifications ──────────────────────────────────────────────────
-function renderNotif() {
-  const container = document.getElementById("notif-container");
-  const perm = "Notification" in window ? Notification.permission : "unsupported";
-
-  if (perm === "unsupported") {
-    container.innerHTML = `<p class="notif-info">Les notifications ne sont pas prises en charge dans ce navigateur.</p>`;
-    return;
-  }
-
-  if (perm === "default") {
-    container.innerHTML = `
-      <p class="notif-info">Autorisez les notifications pour recevoir l'intention chaque matin à 6h45.</p>
-      <button class="btn btn-primary" id="btn-notif">&#128276; Activer les notifications</button>`;
-    document.getElementById("btn-notif").addEventListener("click", requestNotif);
-    return;
-  }
-
-  if (perm === "denied") {
-    container.innerHTML = `<p class="notif-info">Notifications bloquées. Autorisez-les dans les réglages du navigateur, puis rechargez.</p>`;
-    return;
-  }
-
-  container.innerHTML = `
-    <div class="notif-granted">
-      <div class="status-pill"><span class="dot"></span><span>Notifications actives</span></div>
-      <p class="countdown-label">Prochain rappel dans</p>
-      <p class="countdown" id="countdown">${formatCountdown(msUntilNext645())}</p>
-      <button class="btn" id="btn-test">Tester la notification</button>
-    </div>`;
-
-  document.getElementById("btn-test").addEventListener("click", () => {
-    const cached = loadCache();
-    if (cached) triggerNotification(cached);
-  });
-
-  setInterval(() => {
-    const el = document.getElementById("countdown");
-    if (el) el.textContent = formatCountdown(msUntilNext645());
-  }, 1000);
-}
-
-// ─── Notifications ────────────────────────────────────────────────────────────
-async function requestNotif() {
-  const perm = await Notification.requestPermission();
-  if (perm === "granted") {
-    await registerServiceWorker();
-    await scheduleNotification();
-  }
-  renderNotif();
-}
-
-function triggerNotification(result) {
-  if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
-    if (Notification.permission === "granted") {
-      const body = buildNotifBody(result);
-      new Notification("Intention(s) de Messe du jour", { body, tag: "intention" });
-    }
-    return;
-  }
-  navigator.serviceWorker.controller.postMessage({ type: "SHOW_NOTIFICATION", result });
-}
-
-function buildNotifBody(result) {
-  if (!result?.found || !result.intentions?.length) {
-    return "Aucune intention enregistrée pour aujourd'hui.";
-  }
-  return result.intentions
-    .map((i, idx) => result.intentions.length > 1
-      ? `${idx + 1}. ${i.nom}${i.demandeur ? " (" + i.demandeur + ")" : ""}`
-      : `${i.nom}${i.demandeur ? "\nDemandé par " + i.demandeur : ""}`)
-    .join("\n");
-}
-
-async function scheduleNotification() {
-  if (!("serviceWorker" in navigator)) return;
-  const reg = await navigator.serviceWorker.ready;
-  if (reg.active) {
-    reg.active.postMessage({
-      type: "SCHEDULE",
-      hour: NOTIFY_HOUR,
-      minute: NOTIFY_MINUTE,
-      proxyUrl: PROXY_URL,
-    });
-  }
-}
-
-// ─── Service Worker ───────────────────────────────────────────────────────────
-async function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) return;
-  try {
-    const reg = await navigator.serviceWorker.register("sw.js", { scope: "/intentions-messe/" });
-    console.log("SW enregistré :", reg.scope);
-  } catch (e) {
-    console.warn("Erreur SW :", e);
-  }
-}
-
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (e) => {
-    if (e.data?.type === "INTENTION_UPDATE") {
-      saveCache(e.data.result);
-      renderCards(e.data.result);
-    }
-  });
-}
-
-// ─── Install PWA ──────────────────────────────────────────────────────────────
-let deferredInstallPrompt = null;
-
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  const banner = document.getElementById("install-banner");
-  if (banner) banner.style.display = "block";
-});
-
-document.addEventListener("click", async (e) => {
-  if (e.target.id === "btn-install" && deferredInstallPrompt) {
-    deferredInstallPrompt.prompt();
-    const { outcome } = await deferredInstallPrompt.userChoice;
-    if (outcome === "accepted") document.getElementById("install-banner").style.display = "none";
-    deferredInstallPrompt = null;
-  }
-});
-
-// ─── Init ─────────────────────────────────────────────────────────────────────
-async function init() {
-  document.getElementById("date-label").textContent = formatDateFull();
-  document.getElementById("btn-refresh").addEventListener("click", loadIntentions);
-  renderNotif();
-  if ("serviceWorker" in navigator && Notification.permission === "granted") {
-    await registerServiceWorker();
-    await scheduleNotification();
-  }
-  await loadIntentions();
-  initCal();
-}
-
-async function loadIntentions() {
-  const btn = document.getElementById("btn-refresh");
-  if (btn) btn.disabled = true;
-  const cached = loadCache();
-  if (cached) renderCards(cached); else renderCards(null);
-  try {
-    const result = await fetchIntentionsDuJour();
-    saveCache(result);
-    renderCards(result);
-
-  } catch (e) {
-    if (cached) renderCards(cached);
-    else renderCards({ _error: e.message || "Erreur de connexion" });
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-document.addEventListener("DOMContentLoaded", init);
-
-// ═══════════════════════════════════════════════════════
-// ── Calendrier mensuel ──
-// ═══════════════════════════════════════════════════════
-
-const MONTHS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-const DAYS_FR   = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-
-// État du calendrier
-let calYear  = new Date().getFullYear();
-let calMonth = new Date().getMonth(); // 0-based
-// Cache calendrier persistant en localStorage
-const CAL_CACHE_PREFIX = "cal_cache_";
-
-function calSaveCache(key, data) {
-  try { localStorage.setItem(CAL_CACHE_PREFIX + key, JSON.stringify(data)); } catch(e) {}
-}
-
-function calLoadCache(key) {
-  try {
-    const raw = localStorage.getItem(CAL_CACHE_PREFIX + key);
-    return raw ? JSON.parse(raw) : null;
-  } catch(e) { return null; }
-}
-
-function calClearCache(key) {
-  try { localStorage.removeItem(CAL_CACHE_PREFIX + key); } catch(e) {}
-}
-
-function calMonthKey(y, m) {
-  return `${y}-${String(m + 1).padStart(2, "0")}`;
-}
-
-function calMonthLabel(y, m) {
-  return `${MONTHS_FR[m]} ${y}`;
-}
-
-// Fenêtre autorisée : mois courant jusqu'à +5
-function calMinMonth() {
-  const now = new Date();
-  return { y: now.getFullYear(), m: now.getMonth() };
-}
-function calMaxMonth() {
-  const now = new Date();
-  let m = now.getMonth() + 11;
-  let y = now.getFullYear() + Math.floor(m / 12);
-  m = m % 12;
-  return { y, m };
-}
-function calCanGoPrev(y, m) {
-  const min = calMinMonth();
-  return y > min.y || (y === min.y && m > min.m);
-}
-function calCanGoNext(y, m) {
-  const max = calMaxMonth();
-  return y < max.y || (y === max.y && m < max.m);
-}
-
-async function fetchMonth(y, m, forceReload = false) {
-  const key = calMonthKey(y, m);
-  if (!forceReload) {
-    const cached = calLoadCache(key);
-    if (cached) return cached;
-  }
-  const res = await fetch(`${PROXY_URL}?month=${key}`, { method: "GET" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  calSaveCache(key, data);
-  return data;
-}
-
-function renderCal(y, m, data) {
-  const today = todayISO();
-  const list = document.getElementById("cal-list");
-
-  // Toujours afficher le nom du mois et mettre à jour les boutons
-  document.getElementById("cal-month-label").textContent = calMonthLabel(y, m);
-  document.getElementById("cal-prev").disabled = !calCanGoPrev(y, m);
-  document.getElementById("cal-next").disabled = !calCanGoNext(y, m);
-
-  if (!data) {
-    list.innerHTML = `<div class="cal-loading"><div class="spinner"></div><p class="loading-text">Chargement...</p></div>`;
-    return;
-  }
-
-  const key = calMonthKey(y, m);
-  const byDay = data.byDay || {};
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
-  let html = "";
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${key}-${String(d).padStart(2, "0")}`;
-    const dateObj = new Date(dateStr + "T00:00:00");
-    const dow = dateObj.getDay(); // 0=dim
-
-    // Séparateur entre chaque jour (sauf avant le 1er)
-    if (d > 1) {
-      html += `<div class="cal-day-sep"></div>`;
+    :root {
+      --cream: #F5F0E8;
+      --dark: #1C1410;
+      --darker: #0F0A08;
+      --gold: #B8860B;
+      --gold-light: #D4A017;
+      --gold-dim: rgba(184,134,11,0.25);
+      --text-dim: rgba(245,240,232,0.45);
+      --text-mid: rgba(245,240,232,0.7);
+      --green: #7DBF7D;
     }
 
-    const isToday = dateStr === today;
-    const intentions = byDay[dateStr] || [];
-    const dayLabel = `${DAYS_FR[dow]} ${d}`;
-
-    html += `<div class="cal-day${isToday ? " today" : ""}">`;
-    html += `<span class="cal-day-num"><span class="cal-day-name">${DAYS_FR[dow]}</span> ${d}</span>`;
-    html += `<div class="cal-day-content">`;
-
-    if (intentions.length === 0) {
-      html += `<span class="cal-empty-day">—</span>`;
-    } else {
-      intentions.forEach(i => {
-        const nom = i.nom.replace(/\s*♦\s*$/, "");
-        const fixeMark = i.fixe ? `<span class="fixe-mark">♦</span>` : "";
-        // Détecter neuvaine (9 jours) ou trentain (30 jours)
-        let periodTag = "";
-        if (i.dateDebut && i.dateFin) {
-          const start = new Date(i.dateDebut + "T00:00:00");
-          const end   = new Date(i.dateFin   + "T00:00:00");
-          const days  = Math.round((end - start) / 86400000) + 1;
-          if (days === 9)  periodTag = " 9️⃣";
-          if (days === 30) periodTag = " 🪦";
-        }
-        html += `<div class="cal-entry">`;
-        html += `<div class="cal-intention">${nom}${periodTag}${fixeMark}</div>`;
-        if (i.demandeur) {
-          html += `<div class="cal-demandeur">${i.demandeur}</div>`;
-        }
-        html += `</div>`;
-      });
+    html, body {
+      background: #120D0A;
+      color: var(--cream);
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      -webkit-font-smoothing: antialiased;
     }
 
-    html += `</div></div>`;
-  }
-
-  list.innerHTML = html;
-
-  // Scroll vers aujourd'hui si on est sur le mois courant
-  const now = new Date();
-  if (y === now.getFullYear() && m === now.getMonth()) {
-    const todayEl = list.querySelector(".cal-day.today");
-    if (todayEl) setTimeout(() => todayEl.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
-  }
-}
-
-async function loadCal(y, m, forceReload = false) {
-  // Si pas de forceReload, afficher le cache immédiatement pendant le chargement
-  if (!forceReload) {
-    const cached = calLoadCache(calMonthKey(y, m));
-    if (cached) {
-      renderCal(y, m, cached);
-    } else {
-      renderCal(y, m, null); // spinner seulement si pas de cache
+    #app {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 20px env(safe-area-inset-bottom, 20px);
+      padding-bottom: 40px;
     }
-  } else {
-    renderCal(y, m, null); // spinner sur forceReload
-  }
-  try {
-    const data = await fetchMonth(y, m, forceReload);
-    renderCal(y, m, data);
-  } catch (e) {
-    document.getElementById("cal-list").innerHTML = `<p class="notif-info">Erreur : ${e.message}</p>`;
-  }
-}
 
-function initCal() {
-  const now = new Date();
-  calYear  = now.getFullYear();
-  calMonth = now.getMonth();
-
-  document.getElementById("cal-refresh").addEventListener("click", async () => {
-    const btn = document.getElementById("cal-refresh");
-    btn.classList.add("spinning");
-    btn.disabled = true;
-    await loadCal(calYear, calMonth, true);
-    btn.classList.remove("spinning");
-    btn.disabled = false;
-  });
-
-  document.getElementById("cal-prev").addEventListener("click", () => {
-    if (!calCanGoPrev(calYear, calMonth)) return;
-    calMonth--;
-    if (calMonth < 0) { calMonth = 11; calYear--; }
-    loadCal(calYear, calMonth);
-  });
-
-  document.getElementById("cal-next").addEventListener("click", () => {
-    if (!calCanGoNext(calYear, calMonth)) return;
-    calMonth++;
-    if (calMonth > 11) { calMonth = 0; calYear++; }
-    loadCal(calYear, calMonth);
-  });
-
-  loadCal(calYear, calMonth);
-
-  // Préchargement silencieux des mois suivants en arrière-plan
-  preloadNextMonths();
-}
-
-async function preloadNextMonths() {
-  const max = calMaxMonth();
-  let y = calYear;
-  let m = calMonth;
-  for (let i = 0; i < 11; i++) {
-    m++;
-    if (m > 11) { m = 0; y++; }
-    if (y > max.y || (y === max.y && m > max.m)) break;
-    const key = calMonthKey(y, m);
-    if (!calLoadCache(key)) {
-      try {
-        const data = await fetchMonth(y, m);
-        calSaveCache(key, data);
-      } catch (e) {
-        // Échec silencieux — le mois sera rechargé à la demande
-      }
+    /* ── Header ── */
+    header {
+      text-align: center;
+      padding: 48px 0 24px;
+      border-bottom: 1px solid var(--gold-dim);
+      margin-bottom: 28px;
     }
-  }
-}
+    .cross { font-size: 22px; color: var(--gold); letter-spacing: 6px; display: block; margin-bottom: 10px; }
+    .date-label { font-family: 'Inconsolata', monospace; font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+    h1 { font-size: 26px; font-weight: normal; letter-spacing: 0.5px; color: var(--cream); }
+
+    /* ── Card ── */
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--gold-dim);
+      border-radius: 3px;
+      padding: 28px 22px;
+      margin-bottom: 14px;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+      transition: opacity 0.3s;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    }
+    .card.loading { opacity: 0.7; }
+
+    /* ── Spinner ── */
+    .spinner { width: 26px; height: 26px; border: 2px solid var(--gold-dim); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-family: 'Inconsolata', monospace; font-size: 12px; letter-spacing: 1.5px; color: var(--text-dim); }
+
+    /* ── Intention content ── */
+    .intention-nom { font-size: 22px; font-weight: normal; line-height: 1.35; color: var(--cream); margin-bottom: 18px; }
+    .demandeur-label { font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); display: block; margin-bottom: 3px; }
+    .demandeur-nom { font-style: italic; font-size: 16px; color: var(--gold-light); display: block; margin-bottom: 14px; }
+    .description { font-style: italic; font-size: 14px; color: var(--text-mid); line-height: 1.6; margin-bottom: 18px; }
+    .date-badge { display: inline-flex; align-items: center; gap: 6px; font-family: 'Inconsolata', monospace; font-size: 11px; letter-spacing: 1px; color: var(--text-dim); border-top: 1px solid var(--gold-dim); padding-top: 12px; }
+    .multi-tag { display: inline-block; margin-top: 10px; font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 2px; padding: 3px 8px; }
+    .intention-index { font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+
+    /* ── Empty / Error ── */
+    .empty-icon { font-size: 30px; display: block; margin-bottom: 12px; }
+    .empty-text { font-style: italic; font-size: 15px; color: var(--text-dim); }
+    .error-card { border-color: rgba(200,60,60,0.35); background: rgba(200,60,60,0.05); }
+    .error-icon { font-size: 26px; display: block; margin-bottom: 10px; color: #C85050; }
+    .error-text { color: rgba(220,100,100,0.85); font-size: 14px; margin-bottom: 14px; }
+
+    /* ── Buttons ── */
+    .btn { display: block; width: 100%; padding: 12px 0; background: transparent; border: 1px solid var(--gold-dim); color: var(--text-dim); border-radius: 3px; cursor: pointer; font-family: 'Inconsolata', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; transition: border-color 0.2s, color 0.2s; }
+    .btn:hover { border-color: var(--gold); color: var(--gold-light); }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn-primary { background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%); border: none; color: var(--dark); font-family: 'Cormorant Garamond', serif; font-size: 15px; letter-spacing: 0.5px; font-weight: normal; text-transform: none; padding: 13px 0; }
+    .btn-primary:hover { filter: brightness(1.1); color: var(--dark); }
+
+    /* ── Section title ── */
+    .section-title { font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: rgba(245,240,232,0.28); font-weight: normal; border-top: 1px solid var(--gold-dim); padding-top: 22px; margin-bottom: 16px; }
+
+    /* ── Notifications ── */
+    .notif-section { margin-top: 6px; }
+    .notif-info { font-style: italic; font-size: 13px; color: var(--text-dim); line-height: 1.55; margin-bottom: 16px; }
+    .notif-granted { text-align: center; }
+    .status-pill { display: inline-flex; align-items: center; gap: 7px; font-family: 'Inconsolata', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--green); margin-bottom: 20px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 7px var(--green); }
+    .countdown-label { font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; color: rgba(245,240,232,0.28); margin-bottom: 4px; }
+    .countdown { font-family: 'Inconsolata', monospace; font-size: 36px; color: var(--gold-light); letter-spacing: 4px; margin-bottom: 20px; }
+    .warning-text { font-family: 'Inconsolata', monospace; font-size: 10px; color: rgba(245,240,232,0.22); font-style: italic; line-height: 1.4; margin-top: 12px; }
+
+    /* ── Install banner ── */
+    #install-banner { display: none; background: rgba(184,134,11,0.1); border: 1px solid var(--gold-dim); border-radius: 3px; padding: 14px 16px; margin-bottom: 14px; text-align: center; }
+    #install-banner p { font-size: 13px; color: var(--text-mid); margin-bottom: 10px; font-style: italic; }
+
+    /* ══════════════════════════════════════
+       ── Calendrier mensuel ──
+    ══════════════════════════════════════ */
+
+    .cal-section {
+      margin-top: 6px;
+      margin-bottom: 6px;
+    }
+
+    /* Navigation mois */
+    .cal-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .cal-nav-btn {
+      background: transparent;
+      border: 1px solid var(--gold-dim);
+      color: var(--text-dim);
+      border-radius: 3px;
+      width: 34px;
+      height: 34px;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color 0.2s, color 0.2s;
+      flex-shrink: 0;
+    }
+    .cal-nav-btn:hover { border-color: var(--gold); color: var(--gold-light); }
+    .cal-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+    .cal-refresh-btn {
+      font-size: 14px;
+      opacity: 0.5;
+      margin-left: 4px;
+    }
+    .cal-refresh-btn:hover { opacity: 1; }
+    .cal-refresh-btn.spinning { opacity: 0.7; }
+    .cal-refresh-btn.spinning span { display: inline-block; animation: spin 0.8s linear infinite; }
+
+    .cal-month-label {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 17px;
+      font-weight: normal;
+      color: var(--cream);
+      text-align: center;
+      letter-spacing: 0.5px;
+      flex: 1;
+    }
+
+    /* Liste des jours */
+    .cal-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cal-day {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 9px 12px;
+      border-radius: 3px;
+      transition: background 0.15s;
+      border-left: 2px solid transparent;
+    }
+
+    .cal-day:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    .cal-day.today {
+      border-left-color: var(--gold);
+      background: rgba(184,134,11,0.07);
+    }
+
+    .cal-day-num {
+      font-family: 'Inconsolata', monospace;
+      font-size: 12px;
+      color: var(--text-dim);
+      width: 52px;
+      flex-shrink: 0;
+      padding-top: 2px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .cal-day-name {
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-right: 5px;
+      opacity: 0.7;
+    }
+
+    .cal-day.today .cal-day-num {
+      color: var(--gold-light);
+    }
+    .cal-day.today .cal-day-name {
+      opacity: 1;
+    }
+
+    .cal-day-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cal-intention {
+      font-size: 13px;
+      color: var(--cream);
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cal-intention + .cal-intention {
+      margin-top: 7px;
+    }
+
+    .cal-entry + .cal-entry {
+      margin-top: 7px;
+    }
+
+    .cal-intention .fixe-mark {
+      color: var(--gold);
+      font-size: 10px;
+      margin-left: 3px;
+    }
+
+    .cal-demandeur {
+      font-family: 'Inconsolata', monospace;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cal-empty-day {
+      font-family: 'Inconsolata', monospace;
+      font-size: 11px;
+      color: rgba(245,240,232,0.15);
+      font-style: italic;
+    }
+
+    .cal-loading {
+      text-align: center;
+      padding: 24px 0;
+    }
+
+    .cal-loading .spinner {
+      margin: 0 auto 8px;
+    }
+
+    /* Séparateur inter-jour */
+    .cal-day-sep {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 6px;
+      margin: 0 20px;
+    }
+    .cal-day-sep::after {
+      content: '';
+      display: block;
+      width: 40%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(184,134,11,0.35), transparent);
+    }
+
+    /* ── Fade-in ── */
+    .fade-in { animation: fadeIn 0.4s ease forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <span class="cross">✠</span>
+      <p class="date-label" id="date-label">—</p>
+      <h1>Intentions de Messe</h1>
+    </header>
+
+    <div id="install-banner">
+      <p>Installez l'application pour les notifications autonomes à 6h45.</p>
+      <button class="btn btn-primary" id="btn-install">⬇ Installer sur l'écran d'accueil</button>
+    </div>
+
+    <div id="card-container"></div>
+
+    <button class="btn" id="btn-refresh">↻ Actualiser</button>
+
+    <!-- Calendrier mensuel -->
+    <section class="cal-section">
+      <h2 class="section-title">Agenda des intentions</h2>
+      <div class="cal-nav">
+        <button class="cal-nav-btn" id="cal-prev">&#8592;</button>
+        <span class="cal-month-label" id="cal-month-label">—</span>
+        <button class="cal-nav-btn" id="cal-next">&#8594;</button>
+        <button class="cal-nav-btn cal-refresh-btn" id="cal-refresh" title="Actualiser"><span>&#8635;</span></button>
+      </div>
+      <div id="cal-list" class="cal-list"></div>
+    </section>
+
+    <section class="notif-section">
+      <h2 class="section-title">Rappel à 6h45</h2>
+      <div id="notif-container"></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
