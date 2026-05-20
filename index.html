@@ -92,7 +92,7 @@
     .demandeur-nom { font-style: italic; font-size: 16px; color: var(--gold-light); display: block; margin-bottom: 14px; }
     .description { font-style: italic; font-size: 14px; color: var(--text-mid); line-height: 1.6; margin-bottom: 18px; }
     .date-badge { display: inline-flex; align-items: center; gap: 6px; font-family: 'Inconsolata', monospace; font-size: 11px; letter-spacing: 1px; color: var(--text-dim); border-top: 1px solid var(--gold-dim); padding-top: 12px; }
-    .multi-tag { display: block; margin-top: 10px; font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 2px; padding: 3px 8px; }
+    .multi-tag { display: block; margin-top: 10px; width: fit-content; margin-left: auto; margin-right: auto; font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); border: 1px solid var(--gold-dim); border-radius: 2px; padding: 3px 8px; }
     .intention-index { font-family: 'Inconsolata', monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
 
     /* ── Empty / Error ── */
@@ -169,6 +169,8 @@
     .cal-refresh-btn:hover { opacity: 1; }
     .cal-refresh-btn.spinning { opacity: 0.7; }
     .cal-refresh-btn.spinning span { display: inline-block; animation: spin 0.8s linear infinite; }
+    #cal-refresh-all.spinning span { animation-direction: reverse; }
+    #cal-refresh-all.spinning span { animation-direction: reverse; }
 
     .cal-month-label {
       font-family: 'Cormorant Garamond', serif;
