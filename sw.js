@@ -1,5 +1,5 @@
 // ─── Service Worker — Intentions de Messe ─────────────────────────────────────
-const CACHE_NAME = "intentions-v3";
+const CACHE_NAME = "intentions-v4";
 const ASSETS = [
   "/intentions-messe/",
   "/intentions-messe/index.html",
