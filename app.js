@@ -291,15 +291,30 @@ let calMonth = new Date().getMonth(); // 0-based
 // Cache calendrier persistant en localStorage
 const CAL_CACHE_PREFIX = "cal_cache_";
 
+const CAL_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
 function calSaveCache(key, data) {
-  try { localStorage.setItem(CAL_CACHE_PREFIX + key, JSON.stringify(data)); } catch(e) {}
+  try {
+    localStorage.setItem(CAL_CACHE_PREFIX + key, JSON.stringify({
+      data,
+      savedAt: Date.now()
+    }));
+  } catch(e) {}
 }
 
-function calLoadCache(key) {
+function calLoadCache(key, ignoreExpiry = false) {
   try {
     const raw = localStorage.getItem(CAL_CACHE_PREFIX + key);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const { data, savedAt } = JSON.parse(raw);
+    if (!ignoreExpiry && Date.now() - savedAt > CAL_CACHE_TTL_MS) return null;
+    return data;
   } catch(e) { return null; }
+}
+
+// Charge le cache même expiré (pour affichage immédiat pendant le rechargement)
+function calLoadCacheStale(key) {
+  return calLoadCache(key, true);
 }
 
 function calClearCache(key) {
@@ -419,11 +434,12 @@ function renderCal(y, m, data) {
 async function loadCal(y, m, forceReload = false) {
   // Si pas de forceReload, afficher le cache immédiatement pendant le chargement
   if (!forceReload) {
-    const cached = calLoadCache(calMonthKey(y, m));
-    if (cached) {
-      renderCal(y, m, cached);
+    // Afficher immédiatement le cache (même périmé) pendant le rechargement
+    const stale = calLoadCacheStale(calMonthKey(y, m));
+    if (stale) {
+      renderCal(y, m, stale);
     } else {
-      renderCal(y, m, null); // spinner seulement si pas de cache
+      renderCal(y, m, null); // spinner seulement si aucun cache
     }
   } else {
     renderCal(y, m, null); // spinner sur forceReload
