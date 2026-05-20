@@ -450,6 +450,28 @@ function initCal() {
     btn.disabled = false;
   });
 
+  document.getElementById("cal-refresh-all").addEventListener("click", async () => {
+    const btn = document.getElementById("cal-refresh-all");
+    btn.classList.add("spinning");
+    btn.disabled = true;
+    // Vider tout le cache calendrier
+    const max = calMaxMonth();
+    let y = new Date().getFullYear();
+    let m = new Date().getMonth();
+    for (let i = 0; i < 12; i++) {
+      calClearCache(calMonthKey(y, m));
+      m++;
+      if (m > 11) { m = 0; y++; }
+      if (y > max.y || (y === max.y && m > max.m)) break;
+    }
+    // Recharger le mois affiché immédiatement
+    await loadCal(calYear, calMonth, true);
+    // Précharger les autres en arrière-plan
+    preloadNextMonths();
+    btn.classList.remove("spinning");
+    btn.disabled = false;
+  });
+
   document.getElementById("cal-prev").addEventListener("click", () => {
     if (!calCanGoPrev(calYear, calMonth)) return;
     calMonth--;
