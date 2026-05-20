@@ -413,12 +413,7 @@ function renderCal(y, m, data) {
 
   list.innerHTML = html;
 
-  // Scroll vers aujourd'hui si on est sur le mois courant
-  const now = new Date();
-  if (y === now.getFullYear() && m === now.getMonth()) {
-    const todayEl = list.querySelector(".cal-day.today");
-    if (todayEl) setTimeout(() => todayEl.scrollIntoView({ behavior: "smooth", block: "nearest" }), 100);
-  }
+
 }
 
 async function loadCal(y, m, forceReload = false) {
