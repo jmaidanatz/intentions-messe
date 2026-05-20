@@ -108,7 +108,13 @@ function renderCards(result) {
         <div class="date-badge">
           <span>&#128197;</span><span>${dateLine}</span>
         </div>
-        ${intention.multiJours ? `<div class="multi-tag">Intention sur plusieurs jours</div>` : ""}
+        ${intention.multiJours ? `<div class="multi-tag">${(() => {
+        if (!intention.dateDebut || !intention.dateFin) return "Intention sur plusieurs jours";
+        const days = Math.round((new Date(intention.dateFin + "T00:00:00") - new Date(intention.dateDebut + "T00:00:00")) / 86400000) + 1;
+        if (days === 9) return "Neuvaine";
+        if (days === 30) return "Trentain";
+        return "Intention sur plusieurs jours";
+      })()}</div>` : ""}
       </div>`;
   }).join("");
 }
