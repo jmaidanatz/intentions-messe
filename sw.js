@@ -88,8 +88,8 @@ function buildNotifBody(result) {
 function showNotification(result) {
   const count = result?.intentions?.length || 0;
   const title = count > 1
-    ? `✠ ${count} intentions de Messe aujourd'hui`
-    : "✠ Intention de Messe du jour";
+    ? `${count} intentions de Messe aujourd'hui`
+    : "Intention de Messe du jour";
 
   self.registration.showNotification(title, {
     body: buildNotifBody(result),
