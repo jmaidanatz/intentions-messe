@@ -1,5 +1,5 @@
 // ─── Service Worker — Intentions de Messe ─────────────────────────────────────
-const CACHE_NAME = "intentions-v4";
+const CACHE_NAME = "intentions-v5";
 const ASSETS = [
   "/intentions-messe/",
   "/intentions-messe/index.html",
@@ -37,6 +37,7 @@ self.addEventListener("message", (e) => {
       minute: e.data.minute,
       proxyUrl: e.data.proxyUrl,
     };
+    saveConfigToCache(scheduleConfig);
     armNextAlarm();
   }
   if (e.data.type === "SHOW_NOTIFICATION") {
@@ -88,8 +89,8 @@ function buildNotifBody(result) {
 function showNotification(result) {
   const count = result?.intentions?.length || 0;
   const title = count > 1
-    ? `${count} intentions de Messe aujourd'hui`
-    : "Intention de Messe du jour";
+    ? `✠ ${count} intentions de Messe aujourd'hui`
+    : "✠ Intention de Messe du jour";
 
   self.registration.showNotification(title, {
     body: buildNotifBody(result),
