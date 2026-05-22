@@ -196,6 +196,8 @@ function buildNotifBody(result) {
 async function scheduleNotification() {
   if (!("serviceWorker" in navigator)) return;
   const reg = await navigator.serviceWorker.ready;
+
+  // 1. setTimeout via SW (fonctionne si l'app reste ouverte ou en arrière-plan court)
   if (reg.active) {
     reg.active.postMessage({
       type: "SCHEDULE",
@@ -203,6 +205,24 @@ async function scheduleNotification() {
       minute: NOTIFY_MINUTE,
       proxyUrl: PROXY_URL,
     });
+  }
+
+  // 2. Periodic Background Sync (fiable même si Android tue le SW pendant la nuit)
+  if ("periodicSync" in reg) {
+    try {
+      const status = await navigator.permissions.query({ name: "periodic-background-sync" });
+      if (status.state === "granted") {
+        // Enregistrer avec une période minimale de 12h (Chrome choisit le moment le plus proche de 6h45)
+        await reg.periodicSync.register("intention-messe-daily", {
+          minInterval: 12 * 60 * 60 * 1000, // 12h en ms
+        });
+        console.log("[PBS] Periodic Background Sync enregistré");
+      } else {
+        console.log("[PBS] Permission refusée :", status.state);
+      }
+    } catch (e) {
+      console.warn("[PBS] Échec enregistrement :", e);
+    }
   }
 }
 
